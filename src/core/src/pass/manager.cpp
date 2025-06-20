@@ -124,6 +124,10 @@ public:
         return std::chrono::duration_cast<std::chrono::milliseconds>(get_timer_value()).count();
     }
 
+    size_t get_microseconds() const {
+        return std::chrono::duration_cast<std::chrono::microseconds>(get_timer_value()).count();
+    }
+
     std::chrono::nanoseconds get_start_time() const {
         return std::chrono::duration_cast<std::chrono::nanoseconds>(m_start_time.time_since_epoch());
     }
@@ -225,7 +229,7 @@ public:
                     std::cout << "  ";
                 }
                 std::cout << std::setw(60) << std::left << name;
-                std::cout << std::setw(5) << std::right << stopwatch.get_milliseconds() << "ms "
+                std::cout << std::setw(5) << std::right << stopwatch.get_microseconds() << "us "
                           << (applied ? "+" : "-") << std::endl;
             } else if (m_file.is_open()) {
                 if (is_pass_manager) {

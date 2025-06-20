@@ -430,6 +430,7 @@ All parameters must be set before calling ``ov::Core::compile_model()`` in order
 - ``ov::intel_gpu::hint::host_task_priority``
 - ``ov::intel_gpu::hint::queue_priority``
 - ``ov::intel_gpu::hint::queue_throttle``
+- ``ov::intel_gpu::hint::transformer_based_model``
 
 
 Read-only Properties

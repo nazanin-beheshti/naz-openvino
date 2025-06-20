@@ -476,7 +476,8 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
                                                           convert_input_output_precision,
                                                           store_original_precision_as_rt_attribute);
 
-        manager.register_pass<ov::pass::CommonOptimizations>();
+        bool transformer_based_model = config.get_transformer_based_model();
+        manager.register_pass<ov::pass::CommonOptimizations>(transformer_based_model);
 
         // In the case of "input -> reshape -> convert -> multiply",
         // the "input -> reshape" subgraph is constant-folded in the above "CommonOptimizations"
@@ -1082,7 +1083,12 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         // not working properly.
         manager.register_pass<ov::pass::Validate>();
 
-        manager.register_pass<ov::pass::RoPEFusion>(true);
+        // Rotary Positional Embedding operation
+        bool transformer_based_model = config.get_transformer_based_model();
+        if (transformer_based_model) {
+            manager.register_pass<ov::pass::RoPEFusion>();
+        }
+            
         pass_config->disable<ov::pass::RoPEFusionGPTJ>();
         pass_config->disable<ov::pass::RoPEFusionIOSlicing>();
         pass_config->disable<ov::pass::RoPEShareCosSin>();

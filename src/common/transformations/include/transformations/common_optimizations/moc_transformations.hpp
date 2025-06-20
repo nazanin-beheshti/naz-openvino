@@ -34,13 +34,15 @@ public:
      * low_precision_enabled = True enables preserving mechanisms that helps to keep
      * low_precision sub-graphs as is.
      */
-    explicit MOCTransformations(bool use_shapes, bool low_precision_enabled = true)
+    explicit MOCTransformations(bool use_shapes, bool low_precision_enabled = true, bool transformer_based_model = false)
         : m_use_shapes(use_shapes),
-          m_low_precision_enabled(low_precision_enabled) {}
+          m_low_precision_enabled(low_precision_enabled),
+          m_transformer_based_model(transformer_based_model){}
 
     bool run_on_model(const std::shared_ptr<ov::Model>& m) override;
 
 private:
     bool m_use_shapes;
     bool m_low_precision_enabled;
+    bool m_transformer_based_model;
 };

@@ -134,7 +134,7 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
     REGISTER_PASS(manager, SliceToStridedSlice, true)
     // Disable low_precision_enabled as all plugins handle low-precision sub-graph manually
     // before CommonOptimization pipeline execution
-    REGISTER_PASS(manager, MOCTransformations, true, false)
+    REGISTER_PASS(manager, MOCTransformations, true, false, m_transformer_based_model)
 
     // Enabling conversion of FP16 IR to legacy representation, each plugin have to disable it
     // after support for FP16 IR is implemented
@@ -142,14 +142,6 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
 
     REGISTER_PASS(manager, MarkDividesInShapeSubgraphs)
     REGISTER_PASS(manager, WeightsDequantizeToFakeQuantize)
-
-    auto common_fusions = manager.register_pass<GraphRewrite>();
-    ADD_MATCHER(common_fusions, SpaceToBatchFusion)
-    ADD_MATCHER(common_fusions, BatchToSpaceFusion)
-    ADD_MATCHER(common_fusions, InterpolateSequenceFusion)
-    ADD_MATCHER(common_fusions, SkipGatherBeforeTransposeAndReshape)
-    ADD_MATCHER(common_fusions, ReduceMerge)
-    common_fusions->set_name("ov::pass::CommonFusions");
 
     manager.register_pass<ConcatReduceFusion>();
     REGISTER_DISABLED_PASS(manager, ConvertPadToGroupConvolution)

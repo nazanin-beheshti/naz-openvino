@@ -3,7 +3,6 @@
 //
 
 #include "transformations/common_optimizations/moc_transformations.hpp"
-
 #include <memory>
 
 #include "itt.hpp"
@@ -95,6 +94,13 @@
 #include "transformations/smart_reshape/matmul_sr.hpp"
 #include "transformations/smart_reshape/reshape_sinking.hpp"
 #include "transformations/symbolic_transformations/symbolic_optimizations.hpp"
+#include "transformations/common_optimizations/interpolate_sequence_fusion.hpp"
+#include "transformations/common_optimizations/skip_gather_before_transpose_and_reshape.hpp"
+#include "transformations/common_optimizations/reduce_merge.hpp"
+//#include "intel_gpu/runtime/debug_configuration.hpp"
+//#include "intel_gpu/runtime/execution_config.hpp"
+#include "transformations/utils/utils.hpp"
+
 
 using namespace ov::element;
 
@@ -178,7 +184,7 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
         REGISTER_PASS(manager, Validate)
     }
     REGISTER_PASS(manager, ConvertQuantizeDequantize)
-    REGISTER_PASS(manager, SimplifyShapeOfSubGraph, m_use_shapes)
+    //REGISTER_PASS(manager, SimplifyShapeOfSubGraph, m_use_shapes)
 
     if (!m_use_shapes) {
         manager.register_pass<ov::pass::DisableShapeOfConstantFolding>();
@@ -208,7 +214,7 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
 
     auto eliminations = manager.register_pass<ov::pass::GraphRewrite>();
     ADD_MATCHER(eliminations, EliminateUnsqueezeGather)
-    ADD_MATCHER(eliminations, NopElimination, m_use_shapes)
+    //ADD_MATCHER(eliminations, NopElimination, m_use_shapes)
     ADD_MATCHER(eliminations, SelectWithOneValueCondition)
     eliminations->set_name("ov::pass::CommonEliminations");
 
@@ -228,13 +234,18 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(common_fusions, ReduceReshapeFusion)
     ADD_MATCHER(common_fusions, MVNFusion)
     ADD_MATCHER(common_fusions, DilatedConvolutionConverter)
-    ADD_MATCHER(common_fusions, GeluFusion)
+
+    if (m_transformer_based_model) {
+        ADD_MATCHER(common_fusions, GeluFusion)
+    }
     ADD_MATCHER(common_fusions, LeakyReluFusion)
     ADD_MATCHER(common_fusions, RandomUniformFusion)
     ADD_MATCHER(common_fusions, ConvertTensorIteratorToSequence)
     ADD_MATCHER(common_fusions, SplitConcatPairToInterpolateFusion, m_use_shapes)
     ADD_MATCHER(common_fusions, ConvolutionToGroupConvolutionFusion)
-    ADD_MATCHER(common_fusions, SDPAFusion)
+    if (m_transformer_based_model) {
+        ADD_MATCHER(common_fusions, SDPAFusion)
+    }
     if (m_use_shapes) {
         ADD_MATCHER(common_fusions, NearestNeighborUpsamplingFusion)
     }
@@ -250,6 +261,12 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(common_fusions, NonZeroHorizontalFusion)
     ADD_MATCHER(common_fusions, AdaptivePoolToReduce)
     ADD_MATCHER(common_fusions, ConvertU4WeightsZeroPointToScalar)
+    ADD_MATCHER(common_fusions, SpaceToBatchFusion)
+    ADD_MATCHER(common_fusions, BatchToSpaceFusion)
+    ADD_MATCHER(common_fusions, InterpolateSequenceFusion)
+    ADD_MATCHER(common_fusions, SkipGatherBeforeTransposeAndReshape)
+    ADD_MATCHER(common_fusions, ReduceMerge)
+       
     common_fusions->set_name("ov::pass::CommonFusions");
 
     REGISTER_PASS(manager, BinarizeWeights)
@@ -263,27 +280,6 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(decomp, ConvertConvertPromoteTypes)
     manager.register_pass<ov::pass::LinOpSequenceFusion>();
 
-    auto multiply_fusions = manager.register_pass<ov::pass::GraphRewrite>();
-    ADD_MATCHER(multiply_fusions, ConvolutionMultiplyFusion)
-    ADD_MATCHER(multiply_fusions, GroupConvolutionMultiplyFusion)
-    ADD_MATCHER(multiply_fusions, ConvolutionBackpropDataMultiplyFusion)
-    ADD_MATCHER(multiply_fusions, GroupConvolutionBackpropDataMultiplyFusion)
-    ADD_MATCHER(multiply_fusions, MultiplyConvolutionFusion)
-    ADD_MATCHER(multiply_fusions, MultiplyGroupConvolutionFusion)
-    ADD_MATCHER(multiply_fusions, MultiplyConvolutionBackpropDataFusion)
-    ADD_MATCHER(multiply_fusions, MultiplyGroupConvolutionBackpropDataFusion)
-    multiply_fusions->set_name("ov::pass::MultiplyFusions");
-    REGISTER_PASS(manager, ConstantFolding)
-
-    auto fq_fusions = manager.register_pass<ov::pass::GraphRewrite>();
-    ADD_MATCHER(fq_fusions, FakeQuantizeMulFusion)
-    ADD_MATCHER(fq_fusions, FakeQuantizeReshapeFusion)
-    ADD_MATCHER(fq_fusions, PullTransposeThroughFQUp)
-    ADD_MATCHER(fq_fusions, ReluFakeQuantizeFusion)
-    ADD_MATCHER(fq_fusions, AddFakeQuantizeFusion)
-    ADD_MATCHER(fq_fusions, MulFakeQuantizeFusion)
-    fq_fusions->set_name("ov::pass::FakeQuantizeFusions");
-    REGISTER_PASS(manager, ReverseInputChannelsFusion)
     REGISTER_PASS(manager, AlignEltwiseInputRanks)
     REGISTER_PASS(manager, SharedOpOptimization)
     REGISTER_PASS(manager, ConstantFolding)

@@ -95,14 +95,7 @@ void transformation_pipeline(std::shared_ptr<ov::Model>& model) {
 
     // 2. Fusion transformations:
     REGISTER_PASS(manager, ConvertDivideWithConstant)
-    auto fusions = manager.register_pass<GraphRewrite>();
-    // Gelu fusion have to be executed before MulConv fusion because Mul(X, 0.5) might be fused to Conv weights
-    ADD_MATCHER(fusions, GeluFusion)
-    ADD_MATCHER(fusions, MultiplyConvolutionFusion)
-    ADD_MATCHER(fusions, MultiplyGroupConvolutionFusion)
-    ADD_MATCHER(fusions, MultiplyConvolutionBackpropDataFusion)
-    ADD_MATCHER(fusions, MultiplyGroupConvolutionBackpropDataFusion)
-    fusions->set_name("ov::pass::MultiplyFusions");
+    
     REGISTER_PASS(manager, ReverseInputChannelsFusion)
 
     // 3. CF call due to detected perf degradations

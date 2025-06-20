@@ -430,7 +430,6 @@ bool ov::pass::StridedSliceOptimization::run_on_model(const std::shared_ptr<ov::
     manager.set_per_pass_validation(false);
     if (m_use_shapes) {
         manager.register_pass<UselessSliceEraser>();
-        manager.register_pass<SharedOpOptimization>();
         manager.register_pass<GroupedStridedSliceOptimizer>();
         manager.register_pass<GroupedSliceToVSplitOptimization>();
     }

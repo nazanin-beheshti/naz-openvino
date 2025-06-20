@@ -21,5 +21,11 @@ class TRANSFORMATIONS_API CommonOptimizations;
 class ov::pass::CommonOptimizations : public ov::pass::ModelPass {
 public:
     OPENVINO_MODEL_PASS_RTTI("CommonOptimizations");
+    explicit CommonOptimizations(bool transformer_based_model = false)
+        : m_transformer_based_model(transformer_based_model) {}
+
     bool run_on_model(const std::shared_ptr<ov::Model>& f) override;
+
+private:
+    bool m_transformer_based_model;
 };

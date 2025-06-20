@@ -125,6 +125,12 @@ static constexpr Property<int64_t> available_device_mem{"AVAILABLE_DEVICE_MEM_SI
 static constexpr Property<bool> enable_sdpa_optimization{"GPU_ENABLE_SDPA_OPTIMIZATION"};
 
 /**
+ * @brief Turning on this key enable RoPEFfusion, GeluFusion and SDPAfusion in common fusions.
+ * Disabling transformer based model optimization like GeluFusion, SPDAfusion and RoPEF fusion may provide compilation time reduction for CNN based models.
+ */
+static constexpr Property<bool> transformer_based_model{"GPU_TRANSFORMER_BASED_MODEL" };
+
+/**
  * @brief Turning on this key enables LoRA operation,
  * otherwise the graph will remain in its original form with the decomposed LoRA subgraph.
  * Enabling LoRA operation may provide performance improvements, but has stricter restrictions:
