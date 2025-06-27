@@ -618,7 +618,7 @@ std::vector<ov::PropertyName> Plugin::get_supported_properties() const {
         ov::PropertyName{ov::intel_gpu::hint::queue_priority.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::queue_throttle.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::enable_sdpa_optimization.name(), PropertyMutability::RW},
-        ov::PropertyName{ov::intel_gpu::hint::transformer_based_model.name(), PropertyMutability::RW},
+        ov::PropertyName{ov::intel_gpu::hint::graph_compiler_optimization_level.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::enable_lora_operation.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::enable_loop_unrolling.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::disable_winograd_convolution.name(), PropertyMutability::RW},
@@ -640,6 +640,7 @@ std::vector<ov::PropertyName> Plugin::get_supported_properties() const {
         ov::PropertyName{ov::hint::kv_cache_precision.name(), PropertyMutability::RW},
         ov::PropertyName{ov::hint::model.name(), PropertyMutability::WO},
         ov::PropertyName{ov::intel_gpu::config_file.name(), PropertyMutability::RW},
+        
     };
 
     return supported_properties;

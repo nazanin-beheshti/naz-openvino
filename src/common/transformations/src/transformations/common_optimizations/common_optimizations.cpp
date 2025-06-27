@@ -121,6 +121,7 @@
 #include "transformations/op_conversions/softsign_decomposition.hpp"
 #include "transformations/op_conversions/unique_decomposition.hpp"
 #include "transformations/symbolic_transformations/symbolic_optimizations.hpp"
+#include "transformations/common_optimizations/common_optimizations.hpp"
 
 bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model>& f) {
     RUN_ON_FUNCTION_SCOPE(CommonOptimizations);
@@ -134,7 +135,7 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
     REGISTER_PASS(manager, SliceToStridedSlice, true)
     // Disable low_precision_enabled as all plugins handle low-precision sub-graph manually
     // before CommonOptimization pipeline execution
-    REGISTER_PASS(manager, MOCTransformations, true, false, m_transformer_based_model)
+    REGISTER_PASS(manager, MOCTransformations, true, false, m_graph_compiler_optimization_level)
 
     // Enabling conversion of FP16 IR to legacy representation, each plugin have to disable it
     // after support for FP16 IR is implemented
@@ -145,13 +146,18 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
 
     manager.register_pass<ConcatReduceFusion>();
     REGISTER_DISABLED_PASS(manager, ConvertPadToGroupConvolution)
-    REGISTER_DISABLED_PASS(manager, ConvertInterpolate1ToInterpolate4)
-
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_DISABLED_PASS(manager, ConvertInterpolate1ToInterpolate4)
+    }
     auto decomp = manager.register_pass<GraphRewrite>();
-    ADD_MATCHER(decomp, GroupQueryAttentionDecomposition)
-    ADD_MATCHER(decomp, ScaledDotProductAttentionDecomposition)
+    if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+        ADD_MATCHER(decomp, GroupQueryAttentionDecomposition)
+        ADD_MATCHER(decomp, ScaledDotProductAttentionDecomposition)
+    }
     ADD_MATCHER(decomp, Gelu7Downgrade)
-    ADD_MATCHER(decomp, BidirectionalSequenceDecomposition)
+    if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+        ADD_MATCHER(decomp, BidirectionalSequenceDecomposition)
+    }
     ADD_MATCHER(decomp, ReduceL1Decomposition)
     ADD_MATCHER(decomp, ReduceL2Decomposition)
     ADD_MATCHER(decomp, HSwishDecomposition)
@@ -200,35 +206,36 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
     multiply_fusions->set_name("ov::pass::MultiplyFusions");
 
     REGISTER_PASS(manager, ConstantFolding)
-    REGISTER_PASS(manager, ConvertGather8ToGather7)  // not plugins implemented gather8
-    REGISTER_PASS(manager, ConvertGather7ToGather1)  // not plugins implemented gather7
-
-    REGISTER_DISABLED_PASS(manager, ConvertGather1ToGather7)
-    REGISTER_DISABLED_PASS(manager, ConvertGather7ToGather8)
-    REGISTER_PASS(manager, ConvertDeformableConv8To1)
-    REGISTER_PASS(manager, ConvertSoftMax8ToSoftMax1)
-    REGISTER_DISABLED_PASS(manager, ConvertSoftMax1ToSoftMax8)
-    REGISTER_PASS(manager, ConvertMaxPool14ToMaxPool8)
-    REGISTER_PASS(manager, ConvertMaxPool8ToMaxPool1)
-    REGISTER_DISABLED_PASS(manager, ConvertMaxPool1ToMaxPool8)
-    REGISTER_PASS(manager, ConvertPriorBox8To0)
-    REGISTER_DISABLED_PASS(manager, ConvertDetectionOutput1ToDetectionOutput8)
-    REGISTER_PASS(manager, ConvertDetectionOutput8ToDetectionOutput1)
-    REGISTER_DISABLED_PASS(manager, ConvertROIAlign3To9)
-    REGISTER_PASS(manager, ConvertROIAlign9To3)
-    REGISTER_PASS(manager, ConvertMulticlassNms8ToMulticlassNms9)
-    REGISTER_PASS(manager, ConvertXorToLogicalXor)
-    REGISTER_PASS(manager, ConvertTopK11ToTopK3)
-    REGISTER_PASS(manager, ConvertInterpolate11ToInterpolate4)
-    REGISTER_PASS(manager, ConvertPad12ToPad1)
-    REGISTER_PASS(manager, ConvertScatterElementsUpdate12ToScatterElementsUpdate3)
-    REGISTER_PASS(manager, ConcatFusion)
-    REGISTER_PASS(manager, ConvertAvgPool14ToAvgPool1)
-    REGISTER_PASS(manager, ConvertEmbeddingBagOffsets15ToEmbeddingBagOffsetsSum3)
-    REGISTER_PASS(manager, ConvertEmbeddingBagPacked15ToEmbeddingBagPackedSum3)
-    REGISTER_PASS(manager, ConvertScatterNDUpdate15ToScatterNDUpdate3)
-    REGISTER_PASS(manager, ConvertSliceScatter)
-    REGISTER_PASS(manager, ConvertSqueeze15ToSqueeze0)
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_PASS(manager, ConvertGather8ToGather7)  // not plugins implemented gather8
+        REGISTER_PASS(manager, ConvertGather7ToGather1)  // not plugins implemented gather7
+        REGISTER_DISABLED_PASS(manager, ConvertGather1ToGather7)
+        REGISTER_DISABLED_PASS(manager, ConvertGather7ToGather8)
+        REGISTER_PASS(manager, ConvertDeformableConv8To1)
+        REGISTER_PASS(manager, ConvertSoftMax8ToSoftMax1)
+        REGISTER_DISABLED_PASS(manager, ConvertSoftMax1ToSoftMax8)
+        REGISTER_PASS(manager, ConvertMaxPool14ToMaxPool8)
+        REGISTER_PASS(manager, ConvertMaxPool8ToMaxPool1)
+        REGISTER_DISABLED_PASS(manager, ConvertMaxPool1ToMaxPool8)
+        REGISTER_PASS(manager, ConvertPriorBox8To0)
+        REGISTER_DISABLED_PASS(manager, ConvertDetectionOutput1ToDetectionOutput8)
+        REGISTER_PASS(manager, ConvertDetectionOutput8ToDetectionOutput1)
+        REGISTER_DISABLED_PASS(manager, ConvertROIAlign3To9)
+        REGISTER_PASS(manager, ConvertROIAlign9To3)
+        REGISTER_PASS(manager, ConvertMulticlassNms8ToMulticlassNms9)
+        REGISTER_PASS(manager, ConvertXorToLogicalXor)
+        REGISTER_PASS(manager, ConvertTopK11ToTopK3)
+        REGISTER_PASS(manager, ConvertInterpolate11ToInterpolate4)
+        REGISTER_PASS(manager, ConvertPad12ToPad1)
+        REGISTER_PASS(manager, ConvertScatterElementsUpdate12ToScatterElementsUpdate3)
+        REGISTER_PASS(manager, ConcatFusion)
+        REGISTER_PASS(manager, ConvertAvgPool14ToAvgPool1)
+        REGISTER_PASS(manager, ConvertEmbeddingBagOffsets15ToEmbeddingBagOffsetsSum3)
+        REGISTER_PASS(manager, ConvertEmbeddingBagPacked15ToEmbeddingBagPackedSum3)
+        REGISTER_PASS(manager, ConvertScatterNDUpdate15ToScatterNDUpdate3)
+        REGISTER_PASS(manager, ConvertSliceScatter)
+        REGISTER_PASS(manager, ConvertSqueeze15ToSqueeze0)
+    }
 
     auto fq_fusions = manager.register_pass<GraphRewrite>();
     ADD_MATCHER(fq_fusions, FakeQuantizeMulFusion)

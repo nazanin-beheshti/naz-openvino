@@ -80,6 +80,7 @@ namespace hint {
  * @ingroup ov_runtime_ocl_gpu_prop_cpp_api
  */
 using ThrottleLevel = ov::hint::Priority;
+using GPU_Graph_compiler_level = ov::hint::Graph_compiler_level;
 
 /**
  * @brief This key instructs the GPU plugin to use OpenCL queue throttle hints
@@ -125,10 +126,15 @@ static constexpr Property<int64_t> available_device_mem{"AVAILABLE_DEVICE_MEM_SI
 static constexpr Property<bool> enable_sdpa_optimization{"GPU_ENABLE_SDPA_OPTIMIZATION"};
 
 /**
- * @brief Turning on this key enable RoPEFfusion, GeluFusion and SDPAfusion in common fusions.
- * Disabling transformer based model optimization like GeluFusion, SPDAfusion and RoPEF fusion may provide compilation time reduction for CNN based models.
+ * @brief The below key defines the level of graph compiler optimization. Basic applies basic optimization to the graph for GPU Plugin
+ * like fusions, decompositions. Advanced applies all transformations to to the graph compiler for the GPU Plugin.
+ * The options are BASIC_CNN, BASIC_LM, INTERMEDIATE_CN, INTERMEDIATE_LM, ADVANCED
+ * BASIC, applies only basic optimization like fusion, decomposition.Allocator
+ * ADVANCED, applies all optimization to the graph
+ * The purpose of the above is giving user the option to reduce graph compilation time if desired.
+  * @ingroup ov_runtime_ocl_gpu_prop_cpp_api
  */
-static constexpr Property<bool> transformer_based_model{"GPU_TRANSFORMER_BASED_MODEL" };
+static constexpr Property<ov::hint::Graph_compiler_level> graph_compiler_optimization_level{"GPU_GRAPH_COMPILER_OPTIMIZATION_LEVEL"};
 
 /**
  * @brief Turning on this key enables LoRA operation,

@@ -470,14 +470,15 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::pass::KeepDequantizationPrecision>(
             ov::element::TypeVector{ov::element::i32, ov::element::u32, ov::element::u16}, add_precision_sensitive_convert);
 
+        ov::hint::Graph_compiler_level m_graph_compiler_optimization_level = config.get_graph_compiler_optimization_level();
+
         manager.register_pass<ov::pass::ConvertPrecision>(fp_convert_precision_map,
                                                           empty_fuse_map,
                                                           keep_precision_sensitive_in_fp32_1,
                                                           convert_input_output_precision,
                                                           store_original_precision_as_rt_attribute);
 
-        bool transformer_based_model = config.get_transformer_based_model();
-        manager.register_pass<ov::pass::CommonOptimizations>(transformer_based_model);
+        manager.register_pass<ov::pass::CommonOptimizations>(m_graph_compiler_optimization_level);
 
         // In the case of "input -> reshape -> convert -> multiply",
         // the "input -> reshape" subgraph is constant-folded in the above "CommonOptimizations"
@@ -554,22 +555,26 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::pass::WrapInterpolateIntoTransposes>();
         manager.register_pass<ov::pass::TransposeSinking>();
 
-        if (!unroll_loop) {
+       if (!unroll_loop && m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
             manager.register_pass<ov::pass::BidirectionalLSTMSequenceDecomposition>();
             manager.register_pass<ov::pass::BidirectionalGRUSequenceDecomposition>();
             manager.register_pass<ov::pass::BidirectionalRNNSequenceDecomposition>();
         }
-
-        manager.register_pass<ov::intel_gpu::ConvertBinaryConvolutionToConvolution>();
-        manager.register_pass<ov::pass::ConvertSequenceToTensorIterator>();
+        if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::intel_gpu::ConvertBinaryConvolutionToConvolution>();
+        }
+        if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::pass::ConvertSequenceToTensorIterator>();
+        }
         manager.register_pass<ov::pass::ConvertOpSet3ToOpSet2>();
         manager.register_pass<ov::pass::ConvertOpSet2ToOpSet1>();
 
-        manager.register_pass<ov::pass::LSTMCellDecomposition>();
-        manager.register_pass<ov::pass::GRUCellDecomposition>();
-        manager.register_pass<ov::pass::RNNCellDecomposition>();
-
-        if (unroll_loop) {
+        if (!unroll_loop && m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::pass::LSTMCellDecomposition>();
+            manager.register_pass<ov::pass::GRUCellDecomposition>();
+            manager.register_pass<ov::pass::RNNCellDecomposition>();
+        }
+        if (unroll_loop && m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
             manager.register_pass<ov::pass::BidirectionalLSTMSequenceDecomposition>();
             manager.register_pass<ov::pass::BidirectionalGRUSequenceDecomposition>();
             manager.register_pass<ov::pass::BidirectionalRNNSequenceDecomposition>();
@@ -619,20 +624,22 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
                     return true;
                 });
 
-        manager.register_pass<ConvertShapeOf1To3>();
-        manager.register_pass<ov::pass::ConvertNMS1ToNMS9>();
-        manager.register_pass<ov::pass::ConvertNMS3ToNMS9>();
-        manager.register_pass<ov::pass::ConvertNMS4ToNMS9>();
-        manager.register_pass<ov::pass::ConvertNMS5ToNMS9>();
-        manager.register_pass<ov::pass::ConvertNMS9ToNMSIEInternal>();
-        manager.register_pass<ov::pass::ConvertNMSRotatedToNMSIEInternal>();
-        manager.register_pass<ov::pass::ConvertGP9ToGPIEInternal>();
-        manager.register_pass<ov::pass::ConvertMatrixNmsToMatrixNmsIE>();
-        manager.register_pass<ov::pass::ConvertGather0D>();
-        manager.register_pass<ov::pass::ConvertPriorBox8To0, false>();
-        manager.register_pass<ov::pass::ConvertMulticlassNmsToMulticlassNmsIE>();
-        manager.register_pass<ov::pass::TransposeMatMul>();
-        manager.register_pass<ov::pass::ConvertPad12ToPad1, false>();
+        if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+            manager.register_pass<ConvertShapeOf1To3>();
+            manager.register_pass<ov::pass::ConvertNMS1ToNMS9>();
+            manager.register_pass<ov::pass::ConvertNMS3ToNMS9>();
+            manager.register_pass<ov::pass::ConvertNMS4ToNMS9>();
+            manager.register_pass<ov::pass::ConvertNMS5ToNMS9>();
+            manager.register_pass<ov::pass::ConvertNMS9ToNMSIEInternal>();
+            manager.register_pass<ov::pass::ConvertNMSRotatedToNMSIEInternal>();
+            manager.register_pass<ov::pass::ConvertGP9ToGPIEInternal>();
+            manager.register_pass<ov::pass::ConvertMatrixNmsToMatrixNmsIE>();
+            manager.register_pass<ov::pass::ConvertGather0D>();
+            manager.register_pass<ov::pass::ConvertPriorBox8To0, false>();
+            manager.register_pass<ov::pass::ConvertMulticlassNmsToMulticlassNmsIE>();
+            manager.register_pass<ov::pass::TransposeMatMul>();
+            manager.register_pass<ov::pass::ConvertPad12ToPad1, false>();
+        }
         manager.register_pass<DecomposeReduceForScalarOutput>();
 
         precisions_map int_convert_precision_map{
@@ -1083,19 +1090,18 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         // not working properly.
         manager.register_pass<ov::pass::Validate>();
 
-        // Rotary Positional Embedding operation
-        bool transformer_based_model = config.get_transformer_based_model();
-        if (transformer_based_model) {
-            manager.register_pass<ov::pass::RoPEFusion>();
-        }
-            
-        pass_config->disable<ov::pass::RoPEFusionGPTJ>();
-        pass_config->disable<ov::pass::RoPEFusionIOSlicing>();
-        pass_config->disable<ov::pass::RoPEShareCosSin>();
+        ov::hint::Graph_compiler_level m_graph_compiler_optimization_level = config.get_graph_compiler_optimization_level();
 
-        manager.register_pass<ov::intel_gpu::IncreasePositionIdsPrecision>();
-        // This Validate is needed for proper data type propagation after applying IncreasePositionIdsPrecision pass
-        manager.register_pass<ov::pass::Validate>();
+        if(m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN){
+            manager.register_pass<ov::pass::RoPEFusion>();
+            pass_config->disable<ov::pass::RoPEFusionGPTJ>();
+            pass_config->disable<ov::pass::RoPEFusionIOSlicing>();
+            pass_config->disable<ov::pass::RoPEShareCosSin>();
+
+            manager.register_pass<ov::intel_gpu::IncreasePositionIdsPrecision>();
+            // This Validate is needed for proper data type propagation after applying IncreasePositionIdsPrecision pass
+            manager.register_pass<ov::pass::Validate>();
+        }
 
         float activations_scale_factor = config.get_activations_scale_factor();
 
@@ -1154,6 +1160,7 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
     }
 
     {
+        ov::hint::Graph_compiler_level m_graph_compiler_optimization_level = config.get_graph_compiler_optimization_level();
         ov::pass::Manager manager("GPU:PostLPT");
         manager.set_per_pass_validation(false);
 
@@ -1191,14 +1198,19 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         if (!disable_horizontal_fc_fusion)
             manager.register_pass<ov::pass::ConstantFolding>();
 
-        manager.register_pass<ov::pass::SDPAScaleFusion>();
+        if ( m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::pass::SDPAScaleFusion>();
+        }
         manager.register_pass<ov::pass::ConvertGatherToGatherCompressed>();
         auto pass_config = manager.get_pass_config();
         pass_config->set_callback<ov::intel_gpu::KVCacheFusionMatcher>([](const_node_ptr& node) -> bool {
             const auto& rank = node->input(0).get_partial_shape().rank().get_length();
             return rank != 4;
         });
-        manager.register_pass<ov::intel_gpu::KVCacheFusion>();
+        if ( m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::intel_gpu::KVCacheFusion>();
+        }
+
         manager.register_pass<ov::intel_gpu::FullyConnectedConvertFusion>();
         manager.register_pass<ov::intel_gpu::TransposeFusion>(device_info.supports_immad);
 
@@ -1208,12 +1220,16 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::intel_gpu::UnsqueezeBroadcastReshapeSDPAFusion>();
 
         manager.register_pass<ov::pass::GLUFusion>();
-        manager.register_pass<ov::intel_gpu::IndirectKVCache>();
+        if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
+            manager.register_pass<ov::intel_gpu::IndirectKVCache>();
+            auto kv_cache_compression_dt = config.get_kv_cache_precision();
+            manager.register_pass<ov::intel_gpu::KVCacheCompression>(kv_cache_compression_dt, device_info.supports_immad);
+        }
 
-        auto kv_cache_compression_dt = config.get_kv_cache_precision();
-        manager.register_pass<ov::intel_gpu::KVCacheCompression>(kv_cache_compression_dt, device_info.supports_immad);
-
+        //if (m_transformer_based_model || m_graph_compiler_optimization_level) {
         manager.register_pass<ov::intel_gpu::ConvertConvolutionToInternal>();
+
+        //}
 
         // This pass should be done after asymmetric quantization matching as it can move zp subtraction upper in the graph
         manager.register_pass<ov::pass::MoveEltwiseUpThroughDataMovPerChannel>();

@@ -23,7 +23,8 @@
 #include "openvino/core/any.hpp"
 #include "openvino/core/except.hpp"
 #include "openvino/core/type/element_type.hpp"
-#include "openvino/runtime/common.hpp"
+//#include "openvino/runtime/common.hpp"
+#include "C:/openvino/src/inference/include/openvino/runtime/common.hpp"
 #include "openvino/runtime/tensor.hpp"
 
 namespace ov {
@@ -256,12 +257,67 @@ static constexpr Property<element::Type, PropertyMutability::RW> inference_preci
  * @brief Enum to define possible priorities hints
  * @ingroup ov_runtime_cpp_prop_api
  */
+
+
+enum class Graph_compiler_level {
+    BASIC_CNN = 0,           //!<  Low priority for CNN models
+    INTERMEDIATE_CNN = 1,        //!<  Medium priority for CNN models
+    BASIC_LM = 2,           //!<  Low priority for Language Models
+    INTERMEDIATE_LM = 3,        //!<  Medium priority for Language Models
+    ADVANCED = 4,          //!<  High priority
+    DEFAULT = ADVANCED,  //!<  Default priority is MEDIUM
+};
+
+/** @cond INTERNAL */
+inline std::ostream& operator<<(std::ostream& os, const Graph_compiler_level& graph_compiler_level) {
+    switch (graph_compiler_level) {
+    case Graph_compiler_level::BASIC_CNN:
+        return os << "BASIC_CNN";
+    case Graph_compiler_level::INTERMEDIATE_CNN:
+        return os << "INTERMEDIATE_CNN";
+    case Graph_compiler_level::BASIC_LM:
+        return os << "BASIC_LM";
+    case Graph_compiler_level::INTERMEDIATE_LM:
+        return os << "INTERMEDIATE_LM";
+    case Graph_compiler_level::ADVANCED:
+        return os << "ADVANCED";
+    default:
+        OPENVINO_THROW("Unsupported Graph compiler level");
+    }
+}
+
+inline std::istream& operator>>(std::istream& is, Graph_compiler_level& graph_compiler_level) {
+    std::string str;
+    is >> str;
+    if (str == "BASIC_CNN") {
+        graph_compiler_level = Graph_compiler_level::BASIC_CNN;
+    }
+    else if (str == "INTERMEDIATE_CNN") {
+        graph_compiler_level = Graph_compiler_level::INTERMEDIATE_CNN;
+    }
+    else if (str == "BASIC_LM") {
+        graph_compiler_level = Graph_compiler_level::BASIC_LM;
+    }
+    else if (str == "INTERMEDIATE_LM") {
+        graph_compiler_level = Graph_compiler_level::INTERMEDIATE_LM;
+    }
+    else if (str == "ADVANCED") {
+        graph_compiler_level = Graph_compiler_level::ADVANCED;
+    }
+    else {
+        OPENVINO_THROW("Unsupported Graph compiler level: ", str);
+    }
+    return is;
+}
+/** @endcond */
+
 enum class Priority {
     LOW = 0,           //!<  Low priority
     MEDIUM = 1,        //!<  Medium priority
     HIGH = 2,          //!<  High priority
     DEFAULT = MEDIUM,  //!<  Default priority is MEDIUM
 };
+
 
 /** @cond INTERNAL */
 inline std::ostream& operator<<(std::ostream& os, const Priority& priority) {
@@ -294,6 +350,7 @@ inline std::istream& operator>>(std::istream& is, Priority& priority) {
     return is;
 }
 /** @endcond */
+
 
 /**
  * @brief High-level OpenVINO model priority hint
@@ -1354,4 +1411,5 @@ static constexpr Property<uint64_t, PropertyMutability::RW> key_cache_group_size
  * @ingroup ov_runtime_cpp_prop_api
  */
 static constexpr Property<uint64_t, PropertyMutability::RW> value_cache_group_size{"VALUE_CACHE_GROUP_SIZE"};
+
 }  // namespace ov

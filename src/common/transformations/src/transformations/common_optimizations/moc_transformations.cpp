@@ -97,10 +97,7 @@
 #include "transformations/common_optimizations/interpolate_sequence_fusion.hpp"
 #include "transformations/common_optimizations/skip_gather_before_transpose_and_reshape.hpp"
 #include "transformations/common_optimizations/reduce_merge.hpp"
-//#include "intel_gpu/runtime/debug_configuration.hpp"
-//#include "intel_gpu/runtime/execution_config.hpp"
 #include "transformations/utils/utils.hpp"
-
 
 using namespace ov::element;
 
@@ -154,19 +151,23 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     // In particular, if zero dim tensor is consumed in body of MultiSubGraphOp
     // RemoveConcatZeroDimInput and RemoveMultiSubGraphOpDanglingParamsResults should be called together.
     using namespace ov::pass;
-    REGISTER_PASS(manager, EliminateConvert)
-    REGISTER_PASS(manager, EliminateScatterUpdate)
-    REGISTER_PASS(manager, RemoveConcatZeroDimInput)
-    REGISTER_PASS(manager, EliminateLoopInputsOutputs);
-    REGISTER_PASS(manager, Validate)
-    // todo: ticket 96960
-    // the order EliminateDuplicateTIInputs and RemoveMultiSubGraphOpDanglingParamsResults is important
-    // it looks like we need to combine these transformations into one.
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED){
+        REGISTER_PASS(manager, EliminateConvert)
+        REGISTER_PASS(manager, EliminateScatterUpdate)
+        REGISTER_PASS(manager, RemoveConcatZeroDimInput)
+        REGISTER_PASS(manager, EliminateLoopInputsOutputs);
+        REGISTER_PASS(manager, Validate)
+    }
+        // todo: ticket 96960
+        // the order EliminateDuplicateTIInputs and RemoveMultiSubGraphOpDanglingParamsResults is important
+        // it looks like we need to combine these transformations into one.
     REGISTER_PASS(manager, EliminateDuplicateTIInputs);
     REGISTER_PASS(manager, RemoveMultiSubGraphOpDanglingParamsResults)
-    REGISTER_PASS(manager, FoldSubgraphEmptyInputs)
-    REGISTER_PASS(manager, DisableRandomUniformConstantFolding)
-    REGISTER_PASS(manager, PushConstantToSubgraph)
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_PASS(manager, FoldSubgraphEmptyInputs)
+        REGISTER_PASS(manager, DisableRandomUniformConstantFolding)
+        REGISTER_PASS(manager, PushConstantToSubgraph)
+    }
     REGISTER_PASS(manager, ConstantFolding)
     REGISTER_PASS(manager, Validate)
 
@@ -176,7 +177,7 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     // dynamism, so we have to execute type/shape propagation after.
     REGISTER_PASS(manager, FuseFilteringBoxesBySize)
     REGISTER_PASS(manager, Validate)
-
+    
     if (!m_use_shapes) {  // Approved Smart Reshape
         REGISTER_PASS(manager, LSTMStatesBroadcast)
         REGISTER_PASS(manager, Validate)
@@ -189,36 +190,40 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     if (!m_use_shapes) {
         manager.register_pass<ov::pass::DisableShapeOfConstantFolding>();
     }
-    // workaround until dynamism in NMS is not supported
-    REGISTER_PASS(manager, ConvertNmsGatherPathToUnsigned)
-    REGISTER_PASS(manager, StridedSliceOptimization, m_use_shapes)
-    REGISTER_PASS(manager, BroadcastElementwiseFusion)
-    REGISTER_PASS(manager, BroadcastTransition)
-    REGISTER_PASS(manager, PullThroughReduce)
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        // workaround until dynamism in NMS is not supported
+        REGISTER_PASS(manager, ConvertNmsGatherPathToUnsigned)
+        REGISTER_PASS(manager, StridedSliceOptimization, m_use_shapes)
+        REGISTER_PASS(manager, BroadcastElementwiseFusion)
+        REGISTER_PASS(manager, BroadcastTransition)
+        REGISTER_PASS(manager, PullThroughReduce)
+    }
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::BASIC_CNN) {
+        // GRUCellFusion and SequenceFusion should be before NopElimination
+        REGISTER_PASS(manager, LSTMCellFusion)
+        REGISTER_PASS(manager, GRUCellFusion)
+        REGISTER_PASS(manager, SequenceFusion)
+    }
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_PASS(manager, ConcatToBroadcast);
 
-    // GRUCellFusion and SequenceFusion should be before NopElimination
-    REGISTER_PASS(manager, LSTMCellFusion)
-    REGISTER_PASS(manager, GRUCellFusion)
-    REGISTER_PASS(manager, SequenceFusion)
+        auto transpose_sinking = manager.register_pass<ov::pass::GraphRewrite>();
+        ADD_MATCHER(transpose_sinking, TransposeSinking)
+        // SplitSqueezeConcatFusion should work in same GraphRewrite as TransposesSinking,
+        // because it replaces pattern that may contain Transposes which must be optimized before
+        // the transformation and it also inserts Transpose that can be optimized by TransposeSinking
+        ADD_MATCHER(transpose_sinking, SplitSqueezeConcatFusion, m_use_shapes)
 
-    REGISTER_PASS(manager, ConcatToBroadcast);
+        REGISTER_PASS(manager, TransposeMatMul)
 
-    auto transpose_sinking = manager.register_pass<ov::pass::GraphRewrite>();
-    ADD_MATCHER(transpose_sinking, TransposeSinking)
-    // SplitSqueezeConcatFusion should work in same GraphRewrite as TransposesSinking,
-    // because it replaces pattern that may contain Transposes which must be optimized before
-    // the transformation and it also inserts Transpose that can be optimized by TransposeSinking
-    ADD_MATCHER(transpose_sinking, SplitSqueezeConcatFusion, m_use_shapes)
+        auto eliminations = manager.register_pass<ov::pass::GraphRewrite>();
+        ADD_MATCHER(eliminations, EliminateUnsqueezeGather)
+        //ADD_MATCHER(eliminations, NopElimination, m_use_shapes)
+        ADD_MATCHER(eliminations, SelectWithOneValueCondition)
+        eliminations->set_name("ov::pass::CommonEliminations");
 
-    REGISTER_PASS(manager, TransposeMatMul)
-
-    auto eliminations = manager.register_pass<ov::pass::GraphRewrite>();
-    ADD_MATCHER(eliminations, EliminateUnsqueezeGather)
-    //ADD_MATCHER(eliminations, NopElimination, m_use_shapes)
-    ADD_MATCHER(eliminations, SelectWithOneValueCondition)
-    eliminations->set_name("ov::pass::CommonEliminations");
-
-    manager.register_pass<ov::pass::ConstantFolding>();
+        manager.register_pass<ov::pass::ConstantFolding>();
+    }
 
     auto common_fusions = manager.register_pass<ov::pass::GraphRewrite>();
     ADD_MATCHER(common_fusions, ConvertScatterElementsToScatter)
@@ -235,7 +240,7 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(common_fusions, MVNFusion)
     ADD_MATCHER(common_fusions, DilatedConvolutionConverter)
 
-    if (m_transformer_based_model) {
+    if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
         ADD_MATCHER(common_fusions, GeluFusion)
     }
     ADD_MATCHER(common_fusions, LeakyReluFusion)
@@ -243,7 +248,7 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(common_fusions, ConvertTensorIteratorToSequence)
     ADD_MATCHER(common_fusions, SplitConcatPairToInterpolateFusion, m_use_shapes)
     ADD_MATCHER(common_fusions, ConvolutionToGroupConvolutionFusion)
-    if (m_transformer_based_model) {
+    if (m_graph_compiler_optimization_level != ov::hint::Graph_compiler_level::BASIC_CNN) {
         ADD_MATCHER(common_fusions, SDPAFusion)
     }
     if (m_use_shapes) {
@@ -269,8 +274,10 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
        
     common_fusions->set_name("ov::pass::CommonFusions");
 
-    REGISTER_PASS(manager, BinarizeWeights)
-    REGISTER_PASS(manager, ConvToBinaryConv)
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_PASS(manager, BinarizeWeights)
+        REGISTER_PASS(manager, ConvToBinaryConv)
+    }
 
     auto decomp = manager.register_pass<ov::pass::GraphRewrite>();
     ADD_MATCHER(decomp, BatchNormDecomposition)
@@ -280,11 +287,13 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     ADD_MATCHER(decomp, ConvertConvertPromoteTypes)
     manager.register_pass<ov::pass::LinOpSequenceFusion>();
 
-    REGISTER_PASS(manager, AlignEltwiseInputRanks)
-    REGISTER_PASS(manager, SharedOpOptimization)
-    REGISTER_PASS(manager, ConstantFolding)
-    REGISTER_PASS(manager, SymbolicOptimizations)
-    REGISTER_PASS(manager, ResolveNameCollisions, true);
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_compiler_level::ADVANCED) {
+        REGISTER_PASS(manager, AlignEltwiseInputRanks)
+        REGISTER_PASS(manager, SharedOpOptimization)
+        REGISTER_PASS(manager, ConstantFolding)
+        REGISTER_PASS(manager, SymbolicOptimizations)
+        REGISTER_PASS(manager, ResolveNameCollisions, true);
+    }
     manager.run_passes(f);
 
     if (!m_use_shapes) {

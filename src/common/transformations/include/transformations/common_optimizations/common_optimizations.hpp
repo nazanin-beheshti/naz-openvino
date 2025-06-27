@@ -9,6 +9,8 @@
 
 #include "openvino/pass/matcher_pass.hpp"
 #include "transformations_visibility.hpp"
+#include "../../../../../inference/include/openvino/runtime/properties.hpp"
+
 
 namespace ov {
 namespace pass {
@@ -21,11 +23,11 @@ class TRANSFORMATIONS_API CommonOptimizations;
 class ov::pass::CommonOptimizations : public ov::pass::ModelPass {
 public:
     OPENVINO_MODEL_PASS_RTTI("CommonOptimizations");
-    explicit CommonOptimizations(bool transformer_based_model = false)
-        : m_transformer_based_model(transformer_based_model) {}
+    explicit CommonOptimizations(ov::hint::Graph_compiler_level graph_compiler_optimization_level = ov::hint::Graph_compiler_level::ADVANCED)
+          :m_graph_compiler_optimization_level(graph_compiler_optimization_level){}
 
     bool run_on_model(const std::shared_ptr<ov::Model>& f) override;
 
 private:
-    bool m_transformer_based_model;
+    ov::hint::Graph_compiler_level m_graph_compiler_optimization_level;
 };
