@@ -117,6 +117,7 @@ std::shared_ptr<ov::Model> Plugin::clone_and_transform_model(const std::shared_p
     config_copy.finalize(context.get(), model.get());
 
     std::string dump_path = GPU_DEBUG_VALUE_OR(config_copy.get_dump_graphs_path(), "");
+    dump_path = "c:/naz/graph_transformed";
     GPU_DEBUG_IF(!dump_path.empty()) {
         auto path_base = dump_path + "/" + cloned_model->get_name();
         ov::pass::VisualizeTree(path_base + ".svg").run_on_model(cloned_model);
@@ -137,6 +138,8 @@ std::shared_ptr<ov::Model> Plugin::clone_and_transform_model(const std::shared_p
         new_res->set_friendly_name(old_res->get_friendly_name());
     }
 
+    auto path_base = dump_path + "/" + cloned_model->get_name() + "_" + "transformed_func";
+    ov::pass::VisualizeTree(path_base + ".svg").run_on_model(cloned_model);
     GPU_DEBUG_IF(!dump_path.empty()) {
         auto path_base = dump_path + "/" + cloned_model->get_name() + "_" +  "transformed_func";
         ov::pass::VisualizeTree(path_base + ".svg").run_on_model(cloned_model);
@@ -619,6 +622,7 @@ std::vector<ov::PropertyName> Plugin::get_supported_properties() const {
         ov::PropertyName{ov::intel_gpu::hint::queue_throttle.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::enable_sdpa_optimization.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::graph_compiler_optimization_level.name(), PropertyMutability::RW},
+        ov::PropertyName{ov::intel_gpu::hint::fp32_model.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::hint::enable_lora_operation.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::enable_loop_unrolling.name(), PropertyMutability::RW},
         ov::PropertyName{ov::intel_gpu::disable_winograd_convolution.name(), PropertyMutability::RW},

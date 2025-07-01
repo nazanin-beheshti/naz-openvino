@@ -35,7 +35,7 @@ public:
      * low_precision_enabled = True enables preserving mechanisms that helps to keep
      * low_precision sub-graphs as is.
      */
-    explicit MOCTransformations(bool use_shapes, bool low_precision_enabled = true, ov::hint::Graph_compiler_level graph_compiler_optimization_level = ov::hint::Graph_compiler_level::ADVANCED)
+    explicit MOCTransformations(bool use_shapes, bool low_precision_enabled = true, ov::hint::Graph_optimization_level graph_compiler_optimization_level = ov::hint::Graph_optimization_level::FULL)
         : m_use_shapes(use_shapes),
           m_low_precision_enabled(low_precision_enabled),
           m_graph_compiler_optimization_level(graph_compiler_optimization_level){}
@@ -45,5 +45,5 @@ public:
 private:
     bool m_use_shapes;
     bool m_low_precision_enabled;
-    ov::hint::Graph_compiler_level m_graph_compiler_optimization_level;
+    ov::hint::Graph_optimization_level m_graph_compiler_optimization_level;
 };

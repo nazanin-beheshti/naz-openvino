@@ -80,7 +80,7 @@ namespace hint {
  * @ingroup ov_runtime_ocl_gpu_prop_cpp_api
  */
 using ThrottleLevel = ov::hint::Priority;
-using GPU_Graph_compiler_level = ov::hint::Graph_compiler_level;
+using GPU_Graph_compiler_level = ov::hint::Graph_optimization_level;
 
 /**
  * @brief This key instructs the GPU plugin to use OpenCL queue throttle hints
@@ -134,7 +134,15 @@ static constexpr Property<bool> enable_sdpa_optimization{"GPU_ENABLE_SDPA_OPTIMI
  * The purpose of the above is giving user the option to reduce graph compilation time if desired.
   * @ingroup ov_runtime_ocl_gpu_prop_cpp_api
  */
-static constexpr Property<ov::hint::Graph_compiler_level> graph_compiler_optimization_level{"GPU_GRAPH_COMPILER_OPTIMIZATION_LEVEL"};
+static constexpr Property<ov::hint::Graph_optimization_level> graph_compiler_optimization_level{"GPU_GRAPH_COMPILER_OPTIMIZATION_LEVEL"};
+
+/**
+ * @brief The below key defined if model is FP16 or int8 or or QDQ. This helps us to avoid some graph compiler passes which are only for precision conversion from FP32 to lower precisions.
+ * The purpose of the above is giving user the option to reduce graph compilation time for FP32 models specifically by avoiding graph compiler pass related to precision conversion.
+  * @ingroup ov_runtime_ocl_gpu_prop_cpp_api
+ */
+static constexpr Property<bool> fp32_model{ "GPU_FP32_MODEL" };
+
 
 /**
  * @brief Turning on this key enables LoRA operation,
