@@ -192,8 +192,9 @@ bool ov::pass::CommonOptimizations::run_on_model(const std::shared_ptr<ov::Model
 
     // LinOpSequenceFusion must be executed after all decompositions
     manager.register_pass<LinOpSequenceFusion>();
-    REGISTER_PASS(manager, UnrollIf)
-
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
+        REGISTER_PASS(manager, UnrollIf)
+    }
         auto multiply_fusions = manager.register_pass<GraphRewrite>();
     if (m_graph_compiler_optimization_level != ov::hint::Graph_optimization_level::TRANSFORMER_SPECIFIC){
         ADD_MATCHER(multiply_fusions, ConvolutionMultiplyFusion)

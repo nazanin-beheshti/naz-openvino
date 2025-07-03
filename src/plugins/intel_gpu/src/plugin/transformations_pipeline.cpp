@@ -366,12 +366,10 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         ov::hint::Graph_optimization_level m_graph_compiler_optimization_level = config.get_graph_compiler_optimization_level();
         auto is_model_quantized = ov::pass::low_precision::LowPrecision::isFunctionQuantized(func);
         enableInt8 = config.get_enable_lp_transformations() && is_model_quantized;
-        auto fp32_model = config.get_fp32_model();
 
-        if(!fp32_model)
-            manager.register_pass<ov::pass::MarkDequantization>(
-                std::vector<ov::element::Type>{ ov::element::i8, ov::element::u8, ov::element::i4, ov::element::u4 },
-                !device_info.supports_immad);
+        manager.register_pass<ov::pass::MarkDequantization>(
+            std::vector<ov::element::Type>{ ov::element::i8, ov::element::u8, ov::element::i4, ov::element::u4 },
+            !device_info.supports_immad);
 
         manager.register_pass<ov::pass::InitNodeInfo>();
         manager.register_pass<EinsumDecomposition>();
@@ -425,41 +423,37 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         type_to_fuse_map empty_fuse_map = {};
         manager.register_pass<ov::pass::Validate>();
 
-        if (!fp32_model) {
-            // fuse softmax, MVN patterns, so that they will not be marked as precision sensitive in ConvertPrecision
-            manager.register_pass<ov::pass::SoftmaxFusion>();
-            manager.register_pass<ov::pass::MVNFusion>();
-            // GroupNormalizationFusion can potentially benefit from MVNFusion
-            manager.register_pass<ov::pass::GroupNormalizationFusion>();
-            // decompose MVNs that sre not supported in GPU, so that they will be marked as precision sensitive in ConvertPrecision
-            manager.register_pass<ov::pass::MVN6Decomposition>();
+        // fuse softmax, MVN patterns, so that they will not be marked as precision sensitive in ConvertPrecision
+        manager.register_pass<ov::pass::SoftmaxFusion>();
+        manager.register_pass<ov::pass::MVNFusion>();
+        // GroupNormalizationFusion can potentially benefit from MVNFusion
+        manager.register_pass<ov::pass::GroupNormalizationFusion>();
+        // decompose MVNs that sre not supported in GPU, so that they will be marked as precision sensitive in ConvertPrecision
+        manager.register_pass<ov::pass::MVN6Decomposition>();
 
-        }
 
         // Run these broadcast optimizations earlier to ensure that those are executed before NopElimination/ConstantFolding
         manager.register_pass<ov::pass::BroadcastElementwiseFusion>();
         manager.register_pass<ov::pass::BroadcastTransition>();
 
-        if (!fp32_model) {
-            manager.register_pass<ov::pass::KeepConstantsPrecisionAndAddConverts>();
-            pass_config->set_callback<ov::pass::KeepConstantsPrecisionAndAddConverts>(
-                [](const_node_ptr& node) -> bool {
-                    auto next_node = node->get_output_target_inputs(0).begin()->get_node();
-                    if (is_type<ov::op::v0::Convert>(next_node)) {
-                        next_node = next_node->get_output_target_inputs(0).begin()->get_node();
-                    }
-                    return !is_type<ov::op::v0::MatMul>(next_node);
-                });
+        manager.register_pass<ov::pass::KeepConstantsPrecisionAndAddConverts>();
+        pass_config->set_callback<ov::pass::KeepConstantsPrecisionAndAddConverts>(
+            [](const_node_ptr& node) -> bool {
+                auto next_node = node->get_output_target_inputs(0).begin()->get_node();
+                if (is_type<ov::op::v0::Convert>(next_node)) {
+                    next_node = next_node->get_output_target_inputs(0).begin()->get_node();
+                }
+                return !is_type<ov::op::v0::MatMul>(next_node);
+            });
 
-            // Disable subtract folding only for the dGPUs to meet the requirements of oneDNN:
-            // it expects to have the same data type for weights and zero points (apply it only for u8 data type, since other compression
-            // types are not supported by oneDNN)
-            manager.register_pass<ov::pass::KeepConstPrecision>(supported_woq_types, !device_info.supports_immad);
-            pass_config->set_callback<ov::pass::MarkDequantization,
-                ov::pass::KeepConstPrecision>([&](const std::shared_ptr<const ov::Node> node) {
-                return !is_decompression_multiply(node, device_info.supports_immad);
-                    });
-        }
+        // Disable subtract folding only for the dGPUs to meet the requirements of oneDNN:
+        // it expects to have the same data type for weights and zero points (apply it only for u8 data type, since other compression
+        // types are not supported by oneDNN)
+        manager.register_pass<ov::pass::KeepConstPrecision>(supported_woq_types, !device_info.supports_immad);
+        pass_config->set_callback<ov::pass::MarkDequantization,
+            ov::pass::KeepConstPrecision>([&](const std::shared_ptr<const ov::Node> node) {
+            return !is_decompression_multiply(node, device_info.supports_immad);
+                });
 
         pass_config->set_callback<ov::pass::RMSFusion>([OV_CAPTURE_CPY_AND_THIS](const_node_ptr& root) -> bool {
             if (!root->get_input_partial_shape(0).is_static()) {
@@ -476,16 +470,14 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         const bool store_original_precision_as_rt_attribute = true;
         const auto add_precision_sensitive_convert = true;
 
-        if (!fp32_model) {
-            manager.register_pass<ov::pass::KeepDequantizationPrecision>(
-                ov::element::TypeVector{ ov::element::i32, ov::element::u32, ov::element::u16 }, add_precision_sensitive_convert);
+        manager.register_pass<ov::pass::KeepDequantizationPrecision>(
+            ov::element::TypeVector{ ov::element::i32, ov::element::u32, ov::element::u16 }, add_precision_sensitive_convert);
 
-            manager.register_pass<ov::pass::ConvertPrecision>(fp_convert_precision_map,
-                                                                empty_fuse_map,
-                                                                keep_precision_sensitive_in_fp32_1,
-                                                                convert_input_output_precision,
-                                                                store_original_precision_as_rt_attribute);
-        }
+        manager.register_pass<ov::pass::ConvertPrecision>(fp_convert_precision_map,
+                                                            empty_fuse_map,
+                                                            keep_precision_sensitive_in_fp32_1,
+                                                            convert_input_output_precision,
+                                                            store_original_precision_as_rt_attribute);
 
         manager.register_pass<ov::pass::CommonOptimizations>(m_graph_compiler_optimization_level);
 
@@ -682,16 +674,14 @@ void TransformationsPipeline::apply(std::shared_ptr<ov::Model> func) {
         manager.register_pass<ov::pass::Validate>();
         const bool keep_precision_sensitive_in_fp32_2 = true;
 
-        if (!fp32_model) {
-            // To convert to f16 input to boolean which is converted to u8, add abs + ceiling + clamp before convert.
-            type_to_fuse_map type_to_fuse = { {ov::opset10::Convert::get_type_info_static(), fuse_type_to_convert} };
-                            manager.register_pass<ov::pass::ConvertPrecision>(int_convert_precision_map,
-                                                                                    type_to_fuse,
-                                                                                keep_precision_sensitive_in_fp32_2,
+
+        // To convert to f16 input to boolean which is converted to u8, add abs + ceiling + clamp before convert.
+        type_to_fuse_map type_to_fuse = { {ov::opset10::Convert::get_type_info_static(), fuse_type_to_convert} };
+                        manager.register_pass<ov::pass::ConvertPrecision>(int_convert_precision_map,
+                                                                                type_to_fuse,
+                                                                            keep_precision_sensitive_in_fp32_2,
                                                                                 convert_input_output_precision);
 
-        }
-  
         pass_config->disable<ov::pass::EyeDecomposition>();
 
         // disable conversion to legacy and use the new mixed precision

@@ -178,18 +178,21 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
         REGISTER_PASS(manager, FuseFilteringBoxesBySize)
         REGISTER_PASS(manager, Validate)
-    }
-    if (!m_use_shapes) {  // Approved Smart Reshape
-        REGISTER_PASS(manager, LSTMStatesBroadcast)
-        REGISTER_PASS(manager, Validate)
-        REGISTER_PASS(manager, ReshapeSinkingMatMul)
-        REGISTER_PASS(manager, Validate)
+
+        if (!m_use_shapes) {  // Approved Smart Reshape
+            REGISTER_PASS(manager, LSTMStatesBroadcast)
+                REGISTER_PASS(manager, Validate)
+                REGISTER_PASS(manager, ReshapeSinkingMatMul)
+                REGISTER_PASS(manager, Validate)
+        }
     }
     REGISTER_PASS(manager, ConvertQuantizeDequantize)
     //REGISTER_PASS(manager, SimplifyShapeOfSubGraph, m_use_shapes)
 
-    if (!m_use_shapes) {
-        manager.register_pass<ov::pass::DisableShapeOfConstantFolding>();
+    if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
+        if (!m_use_shapes) {
+            manager.register_pass<ov::pass::DisableShapeOfConstantFolding>();
+        }
     }
     if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
         // workaround until dynamism in NMS is not supported
@@ -279,17 +282,15 @@ bool ov::pass::MOCTransformations::run_on_model(const std::shared_ptr<ov::Model>
     if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
         REGISTER_PASS(manager, BinarizeWeights)
         REGISTER_PASS(manager, ConvToBinaryConv)
-    }
 
-    auto decomp = manager.register_pass<ov::pass::GraphRewrite>();
-    ADD_MATCHER(decomp, BatchNormDecomposition)
-    ADD_MATCHER(decomp, ConvertDivideWithConstant)
-    ADD_MATCHER(decomp, ConvertSubtractWithConstant)
-    ADD_MATCHER(decomp, ConvertNegative)
-    ADD_MATCHER(decomp, ConvertConvertPromoteTypes)
-    manager.register_pass<ov::pass::LinOpSequenceFusion>();
+        auto decomp = manager.register_pass<ov::pass::GraphRewrite>();
+        ADD_MATCHER(decomp, BatchNormDecomposition)
+        ADD_MATCHER(decomp, ConvertDivideWithConstant)
+        ADD_MATCHER(decomp, ConvertSubtractWithConstant)
+        ADD_MATCHER(decomp, ConvertNegative)
+        ADD_MATCHER(decomp, ConvertConvertPromoteTypes)
+        manager.register_pass<ov::pass::LinOpSequenceFusion>();
 
-    if (m_graph_compiler_optimization_level == ov::hint::Graph_optimization_level::FULL) {
         REGISTER_PASS(manager, AlignEltwiseInputRanks)
         REGISTER_PASS(manager, SharedOpOptimization)
         REGISTER_PASS(manager, ConstantFolding)

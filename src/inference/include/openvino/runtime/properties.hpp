@@ -259,50 +259,44 @@ static constexpr Property<element::Type, PropertyMutability::RW> inference_preci
  */
 
 
-enum class Graph_compiler_level {
-    BASIC_CNN = 0,           //!<  Low priority for CNN models
-    INTERMEDIATE_CNN = 1,        //!<  Medium priority for CNN models
-    BASIC_LM = 2,           //!<  Low priority for Language Models
-    INTERMEDIATE_LM = 3,        //!<  Medium priority for Language Models
-    ADVANCED = 4,          //!<  High priority
-    DEFAULT = ADVANCED,  //!<  Default priority is MEDIUM
+enum class Graph_optimization_level {
+    BASIC = 0,           //!<  basic optimization applied to any model
+    CNN_SPECIFIC = 1,        //!<  CNN specific optimization applied only to CNN models
+    TRANSFORMER_SPECIFIC = 2,           //!< Transfomer specific optimization applied only to Transfomer models
+    FULL = 3,        //!<  Medium priority for Language Models
+    DEFAULT = FULL,  //!<  Default priority is MEDIUM
 };
 
 /** @cond INTERNAL */
-inline std::ostream& operator<<(std::ostream& os, const Graph_compiler_level& graph_compiler_level) {
+inline std::ostream& operator<<(std::ostream& os, const Graph_optimization_level& graph_compiler_level) {
     switch (graph_compiler_level) {
-    case Graph_compiler_level::BASIC_CNN:
-        return os << "BASIC_CNN";
-    case Graph_compiler_level::INTERMEDIATE_CNN:
-        return os << "INTERMEDIATE_CNN";
-    case Graph_compiler_level::BASIC_LM:
-        return os << "BASIC_LM";
-    case Graph_compiler_level::INTERMEDIATE_LM:
-        return os << "INTERMEDIATE_LM";
-    case Graph_compiler_level::ADVANCED:
-        return os << "ADVANCED";
+    case Graph_optimization_level::BASIC:
+        return os << "BASIC";
+    case Graph_optimization_level::CNN_SPECIFIC:
+        return os << "CNN_SPECIFIC";
+    case Graph_optimization_level::TRANSFORMER_SPECIFIC:
+        return os << "TRANSFORMER_SPECIFIC";
+    case Graph_optimization_level::FULL:
+        return os << "FULL";
     default:
         OPENVINO_THROW("Unsupported Graph compiler level");
     }
 }
 
-inline std::istream& operator>>(std::istream& is, Graph_compiler_level& graph_compiler_level) {
+inline std::istream& operator>>(std::istream& is, Graph_optimization_level& graph_compiler_level) {
     std::string str;
     is >> str;
-    if (str == "BASIC_CNN") {
-        graph_compiler_level = Graph_compiler_level::BASIC_CNN;
+    if (str == "BASIC") {
+        graph_compiler_level = Graph_optimization_level::BASIC;
     }
-    else if (str == "INTERMEDIATE_CNN") {
-        graph_compiler_level = Graph_compiler_level::INTERMEDIATE_CNN;
+    else if (str == "CNN_SPECIFIC") {
+        graph_compiler_level = Graph_optimization_level::CNN_SPECIFIC;
     }
-    else if (str == "BASIC_LM") {
-        graph_compiler_level = Graph_compiler_level::BASIC_LM;
+    else if (str == "TRANSFORMER_SPECIFIC") {
+        graph_compiler_level = Graph_optimization_level::TRANSFORMER_SPECIFIC;
     }
-    else if (str == "INTERMEDIATE_LM") {
-        graph_compiler_level = Graph_compiler_level::INTERMEDIATE_LM;
-    }
-    else if (str == "ADVANCED") {
-        graph_compiler_level = Graph_compiler_level::ADVANCED;
+    else if (str == "FULL") {
+        graph_compiler_level = Graph_optimization_level::FULL;
     }
     else {
         OPENVINO_THROW("Unsupported Graph compiler level: ", str);

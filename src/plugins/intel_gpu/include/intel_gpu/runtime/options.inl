@@ -36,8 +36,6 @@ OV_CONFIG_RELEASE_OPTION(ov::internal, enable_lp_transformations, false, "Enable
 OV_CONFIG_RELEASE_OPTION(ov::intel_gpu, config_file, "", "Path to custom layers config file")
 OV_CONFIG_RELEASE_OPTION(ov::hint, model, nullptr, "Shared pointer to the ov::Model")
 OV_CONFIG_RELEASE_OPTION(ov::intel_gpu::hint, graph_compiler_optimization_level, ov::hint::Graph_optimization_level::FULL, "Graph compiler optimization level BASIC, CNN_SPECIFIC, TRANSFORMER_SPECIFIC, FULL")
-OV_CONFIG_RELEASE_OPTION(ov::intel_gpu::hint, fp32_model, false, "Flag to define if model is fp32 to avoid precision conversion passes in graph compiler")
-
 
 OV_CONFIG_RELEASE_INTERNAL_OPTION(ov::intel_gpu, shape_predictor_settings, {10, 16 * 1024, 2, 1.1f}, "Preallocation settings")
 OV_CONFIG_RELEASE_INTERNAL_OPTION(ov::intel_gpu, queue_type, QueueTypes::out_of_order, "Type of the queue that must be used for model execution. May be in-order or out-of-order")
