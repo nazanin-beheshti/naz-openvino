@@ -75,6 +75,7 @@ bool ov::pass::RoPEFusion::run_on_model(const std::shared_ptr<ov::Model>& model)
     symbolic_ctx_manager->register_pass<ov::pass::RoPEFusionQwen>(1);
 
     symbolic_ctx_manager->register_pass<ov::pass::RoPEShareCosSin>();
+    symbolic_ctx_manager->register_pass<ov::pass::RoPEFusionPSU0Model>();
     return symbolic_optimizations.run_on_model(model);
 }
 
@@ -84,6 +85,101 @@ static std::shared_ptr<ov::Node> gen_chatglm_const() {
     auto pred = value_matches("-1, head_cnt, 1, ndims/2, 1") || value_matches("1, -1, head_cnt, ndims/2, 1") ||
                 value_matches("0, 0, 0, ndims/2, 1");
     return wrap_type<v0::Constant>(pred);
+}
+
+ov::pass::RoPEFusionPSU0Model::RoPEFusionPSU0Model() {
+    MATCHER_SCOPE(RoPEFusionPSU0Model);
+
+    auto x = pattern::any_input();  // pattern::rank_equals(4));
+    auto cos_m = ov::pass::pattern::wrap_type<ov::op::v0::Constant>();
+    auto sin_m = ov::pass::pattern::wrap_type<ov::op::v0::Constant>();
+    auto position_id_m = ov::pass::pattern::wrap_type<ov::op::v0::Constant>(pattern::rank_equals(1));
+
+    auto axis = ov::pass::pattern::wrap_type<ov::op::v0::Constant>();
+    auto length = ov::pass::pattern::wrap_type<ov::op::v0::Constant>();
+    auto VardicSplit_m = pattern::wrap_type<opset1::VariadicSplit>({x, 1, {32, 32, 32}});
+    VardicSplit_m->set_output_size(3);
+
+    auto split_1_m = pattern::wrap_type<opset1::Split>({VardicSplit_m->output(0), -1}, {{"num_splits", 2}});
+    split_1_m->set_output_size(2);
+
+    auto add = pattern::wrap_type<opset1::Add>({position_id_m, pattern::any_input()});
+
+    auto axis_cos_m = pattern::wrap_type<ov::opset1::Constant>();
+    auto gather_cos_m = pattern::wrap_type<ov::opset8::Gather>({cos_m, add, axis_cos_m});
+
+    auto axis_sin_m = pattern::wrap_type<ov::opset1::Constant>();
+    auto gather_sin_m = pattern::wrap_type<ov::opset8::Gather>({sin_m, add, axis_sin_m});
+
+    auto mulitply_m_1 = pattern::wrap_type<opset1::Multiply>({split_1_m->output(0), gather_sin_m});
+    auto mulitply_m_2 = pattern::wrap_type<opset1::Multiply>({split_1_m->output(1), gather_cos_m});
+    auto add_m11_m22 = pattern::wrap_type<opset1::Add>({mulitply_m_1, mulitply_m_2});
+
+    auto mulitply_m_11 = pattern::wrap_type<opset1::Multiply>({split_1_m->output(0), gather_cos_m});
+    auto mulitply_m_22 = pattern::wrap_type<opset1::Multiply>({split_1_m->output(1), gather_sin_m});
+
+    auto negative_m = pattern::wrap_type<ov::opset1::Constant>();
+    auto mulitply_neg_m = pattern::wrap_type<opset1::Multiply>({mulitply_m_22, negative_m});
+    auto subtract_m1_m2 = pattern::wrap_type<opset1::Add>({mulitply_m_11, mulitply_neg_m});
+
+    auto concat_m = pattern::wrap_type<opset1::Concat>({subtract_m1_m2, add_m11_m22}, {{"axis", -1}});
+
+    matcher_pass_callback callback = [OV_CAPTURE_CPY_AND_THIS](ov::pass::pattern::Matcher& m) {
+        const auto& pattern_map = m.get_pattern_value_map();
+        auto root = m.get_match_root();
+
+        auto gather_sin = ov::as_type_ptr<ov::opset8::Gather>(pattern_map.at(gather_sin_m).get_node_shared_ptr());
+        auto gather_cos = ov::as_type_ptr<ov::opset8::Gather>(pattern_map.at(gather_cos_m).get_node_shared_ptr());
+        auto VardicSplit = ov::as_type_ptr<opset1::VariadicSplit>(pattern_map.at(VardicSplit_m).get_node_shared_ptr());
+        auto split_1 = ov::as_type_ptr<opset1::Split>(pattern_map.at(split_1_m).get_node_shared_ptr());
+        auto add_2 = ov::as_type_ptr<ov::opset1::Add>(pattern_map.at(add_m11_m22).get_node_shared_ptr());
+        auto multiply_1 = ov::as_type_ptr<ov::opset1::Multiply>(pattern_map.at(mulitply_m_1).get_node_shared_ptr());
+        auto concat = ov::as_type_ptr<ov::opset1::Concat>(pattern_map.at(concat_m).get_node_shared_ptr());
+        auto subtract_1_2 = ov::as_type_ptr<ov::opset1::Add>(pattern_map.at(subtract_m1_m2).get_node_shared_ptr());
+        auto multiply_11 = ov::as_type_ptr<ov::opset1::Multiply>(pattern_map.at(mulitply_m_11).get_node_shared_ptr());
+        auto multiply_22 = ov::as_type_ptr<ov::opset1::Multiply>(pattern_map.at(mulitply_m_22).get_node_shared_ptr());
+     
+        op::internal::RoPE::Config config;
+        config.head_cnt = static_cast<size_t>(1);
+        config.head_size = static_cast<size_t>(32);
+        config.rotary_ndims = config.head_size;
+        config.is_interleaved = false;
+        config.output_trans0213 = false;
+
+        OutputVector new_args;
+        // new_args.push_back(pattern_map.at(x));
+        new_args.push_back(pattern_map.at(VardicSplit_m));
+        new_args.push_back(pattern_map.at(cos_m));
+        new_args.push_back(pattern_map.at(sin_m));
+
+        auto old_node = root;
+        auto new_node = std::make_shared<op::internal::RoPE>(new_args, config);
+        new_node->set_friendly_name(old_node->get_friendly_name());
+        ov::copy_runtime_info(
+            {/* pattern_map.at(x).get_node_shared_ptr(), */
+             pattern_map.at(VardicSplit_m).get_node_shared_ptr(),
+             pattern_map.at(split_1_m).get_node_shared_ptr(),
+             pattern_map.at(gather_cos_m).get_node_shared_ptr(),
+             pattern_map.at(gather_sin_m).get_node_shared_ptr(),
+             pattern_map.at(mulitply_m_1).get_node_shared_ptr(),
+             pattern_map.at(mulitply_m_2).get_node_shared_ptr(),
+             pattern_map.at(mulitply_m_11).get_node_shared_ptr(),
+             pattern_map.at(mulitply_m_22).get_node_shared_ptr(),
+             pattern_map.at(subtract_m1_m2).get_node_shared_ptr(),
+             pattern_map.at(add_m11_m22).get_node_shared_ptr(),
+             pattern_map.at(concat_m).get_node_shared_ptr()},
+            new_node);
+
+        ov::replace_node(old_node, new_node);
+
+        // this new node may match following additional matchers
+        register_new_node(new_node);
+        return true;
+        return true;
+    };
+
+    auto m = std::make_shared<ov::pass::pattern::Matcher>(concat_m, matcher_name);
+    this->register_matcher(m, callback);
 }
 
 ov::pass::RoPEFusionFlux::RoPEFusionFlux() {
