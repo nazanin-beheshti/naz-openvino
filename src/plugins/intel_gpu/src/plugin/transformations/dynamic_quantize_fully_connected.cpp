@@ -59,6 +59,13 @@ DynamicQuantizeFullyConnected::DynamicQuantizeFullyConnected(uint64_t group_size
         if (precomputed_reduction && adj_group_size != UINT64_MAX && adj_group_size > 0 && has_static_wzp) {
             auto weight_zp_shape = m_fc->get_input_partial_shape(4);
             auto weight_scale_shape = m_fc->get_input_partial_shape(3);
+            // constant shape is returned as [] which cause issues in further processing line 66
+            if (weight_zp_shape.get_shape().empty()) {
+                weight_zp_shape.push_back(1);  // scalar zero point
+            }
+            if (weight_scale_shape.get_shape().empty()) {
+                weight_scale_shape.push_back(1);  // scalar zero point
+            }
             const size_t wei_zp_group_size = innermost_size / weight_zp_shape[weight_zp_shape.size() - 1].get_length();
             const size_t wei_scale_group_size = innermost_size / weight_scale_shape[weight_scale_shape.size() - 1].get_length();
             const size_t required_group_size = std::min(wei_zp_group_size, wei_scale_group_size);

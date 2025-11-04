@@ -309,7 +309,9 @@ std::shared_ptr<ov::Model> Graph::create_model() {
     for (std::size_t i{0}; i < model->get_output_size(); ++i) {
         const auto& result_node = model->get_output_op(i);
         const std::string onnx_output_name = onnx_outputs.Get(static_cast<int>(i)).name();
-        result_node->set_friendly_name(onnx_output_name + "/sink_port_0");
+        // onnd model Input/output should match with OV model input/output names.
+        // There OnnxToOvNetworkBindings in ORT backend which checks names from ONNX to OV model matching.
+        result_node->set_friendly_name(onnx_output_name); // + "/sink_port_0");
         const auto& previous_operation = result_node->get_input_node_shared_ptr(0);
         previous_operation->set_friendly_name(onnx_output_name);
     }
@@ -335,10 +337,13 @@ Output<ov::Node> Graph::get_ov_node_from_cache(const std::string& name) {
 ov::OutputVector Graph::get_ov_outputs() {
     ov::OutputVector results;
     for (const auto& output : m_model->get_graph().output()) {
-        const auto& ov_output = get_ov_node_from_cache(output.name());
-        if (!ov::op::util::is_null(ov_output))  // ignore optional outputs
-        {
-            results.emplace_back(ov_output);
+        if (m_cache->contains(output.name())) {
+            const auto& ov_output = m_cache->get_node(output.name());
+            // get_ov_node_from_cache(output.name());
+            if (!ov::op::util::is_null(ov_output))  // ignore optional outputs
+            {
+                results.emplace_back(ov_output);
+            }
         }
     }
     return results;
